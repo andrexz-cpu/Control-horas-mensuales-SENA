@@ -574,7 +574,7 @@
     const sinTildes = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const name = sinTildes(instructorName).trim().replace(/\s+/g, ' ');
     if (!name) return false;
-    const t = sinTildes(text), quien = t.split(' - ')[0];
+    const t = sinTildes(text), quien = t.split(/\s-|-\s/)[0];
     return t.indexOf(name) !== -1 || name.split(' ').every(w => quien.indexOf(w) !== -1);
   }
 
@@ -637,8 +637,9 @@
   /** 'NOMBRE - Competencia / nota' → {competencia, rap} */
   function parseCellText(text) {
     let rest = String(text || '');
-    const i = rest.indexOf(' - ');
-    if (i >= 0) rest = rest.slice(i + 3);
+    // Nombre del instructor antes del guion: 'NOMBRE - …', 'NOMBRE  -…', 'NOMBRE- …' (con o sin espacios).
+    const m = rest.match(/^[^\/]*?\s*-\s*/);
+    if (m && /\s-|-\s/.test(m[0])) rest = rest.slice(m[0].length);
     const j = rest.indexOf(' / ');
     if (j >= 0) return { competencia: rest.slice(0, j).trim(), rap: rest.slice(j + 3).trim() };
     return { competencia: rest.trim(), rap: '' };

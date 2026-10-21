@@ -452,3 +452,11 @@ test('scheduleSources: archivos cargados por ficha, meses cubiertos y horas del 
   assert.equal(src.find(g => g.archivo === 'b.xlsx').horasMes, 0);
   assert.equal(src.filter(g => g.ficha === '1').length, 2); // la sesión sin ficha toma la principal
 });
+
+test('parseCellText: quita el nombre aunque el guion no tenga espacios a ambos lados', () => {
+  assert.deepEqual(C.parseCellText('JORGE PEDROZA  -Registrar información / RAP 01'), { competencia: 'Registrar información', rap: 'RAP 01' });
+  assert.deepEqual(C.parseCellText('JORGE PEDROZA- Operar herramientas / RAP 02'), { competencia: 'Operar herramientas', rap: 'RAP 02' });
+  assert.deepEqual(C.parseCellText('JORGE PEDROZA - OFIMATICA'), { competencia: 'OFIMATICA', rap: '' });
+  assert.equal(C.parseCellText('Resultado de Aprendizaje de la Inducción').competencia, 'Resultado de Aprendizaje de la Inducción');
+  assert.ok(C.nameMatches('JORGE PEDROZA  -Registrar información', 'Jorge Pedroza'));
+});

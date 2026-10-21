@@ -29,8 +29,14 @@
 
   function sanitize(data) {
     data = data && typeof data === 'object' ? data : {};
+    const config = C.normalizeConfig(data.config);
+    // Sesiones importadas con versiones anteriores: si la competencia aún trae el nombre del instructor
+    // ('JORGE PEDROZA  -Registrar…'), se deja solo la competencia.
+    const limpiar = s => (s && s.competencia && /\s-|-\s/.test(s.competencia) && C.nameMatches(s.competencia, config.instructorName))
+      ? Object.assign({}, s, { competencia: C.parseCellText(s.competencia).competencia }) : s;
+    if (Array.isArray(data.sessions)) data.sessions = data.sessions.map(limpiar);
     return {
-      config: C.normalizeConfig(data.config),
+      config,
       entries: Array.isArray(data.entries) ? data.entries.filter(e => e && C.isValidISO(e.date)) : [],
       sessions: Array.isArray(data.sessions) ? data.sessions.filter(s => s && C.isValidISO(s.date)).map(s => C.makeSession(Object.assign({}, s, { id: s.id || C.uid(), status: s.status || 'pendiente' }))) : [],
     };
