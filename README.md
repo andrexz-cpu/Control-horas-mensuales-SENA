@@ -28,7 +28,7 @@ cd "control-horas"
 node --test
 ```
 
-Ejecuta las 32 pruebas de `calc.test.js` (días hábiles, horas esperadas, alertas, importación CSV,
+Ejecuta las 35 pruebas de `calc.test.js` (días hábiles, horas esperadas, alertas, importación CSV,
 importación del cronograma real guardado en `test-fixtures/cronograma_grid.json`).
 
 ## Uso rápido
@@ -56,6 +56,15 @@ importación del cronograma real guardado en `test-fixtures/cronograma_grid.json
 4. **Panel**: horas cumplidas / faltantes / esperadas a hoy, programadas, días hábiles restantes,
    promedio necesario, barras de avance real vs. esperado, un calendario mensual (colores por estado del día,
    cada sesión programada con su horario y competencia, ✓ horas registradas; tocar un día abre el registro con esa fecha) y las alertas (rojo / amarillo / verde).
+   Debajo del calendario está el **horario del mes** (fecha, horario, horas, ficha, competencia/RAP y estado; las
+   franjas seguidas de una misma competencia se unen, p. ej. 16–17 … 23–24 → 16:00–24:00) con el total por ficha.
+   **Cambiar de mes** con ‹ › u *Hoy* también cambia el contrato a ese mes (del 1 al último día), agrega los festivos
+   de Colombia del año y la meta de horas pasa a ser lo programado en el cronograma (Excel) de ese mes, sumando todas las
+   fichas; si el mes no tiene programación, usa días hábiles × horas por día. Si tu contrato tiene otras fechas
+   u horas, ajústalas después en Configuración.
+   La tarjeta **Cronogramas (Excel) cargados** lista cada ficha con el archivo del que salió su programación, los meses
+   que cubre, sesiones, horas, horas del mes mostrado y fecha de importación; avisa en rojo qué fichas no tienen
+   programación en ese mes, para saber qué Excel falta subir (lo cargado antes de esta versión aparece sin nombre de archivo).
    Todo se recalcula al guardar, editar o importar.
 
 ## Estructura
@@ -69,6 +78,7 @@ importación del cronograma real guardado en `test-fixtures/cronograma_grid.json
 | `app.js` | Estado, `localStorage`, render y eventos de la interfaz |
 | `programacion_3536507.js` | Programación precargada extraída del cronograma (12) |
 | `programacion_complementarias.js` | Sesiones precargadas de las formaciones complementarias (3626326 y 3622710) |
+| `favicon.png`, `apple-touch-icon.png` | Ícono de la pestaña (símbolo del SENA) |
 | `version.sh`, `version.json` | Versión de los archivos para que el navegador no use copias viejas |
 | `test-fixtures/cronograma_grid.json` | Cuadrícula del cronograma real usada por las pruebas |
 

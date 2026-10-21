@@ -185,6 +185,24 @@
 
   function countBusinessDays(start, end, cfg) { return businessDays(start, end, cfg).length; }
 
+  /**
+   * Contrato de un mes completo (month 1-12): del día 1 al último día del mes, con los festivos de Colombia
+   * de ese año agregados. Horas totales = horas programadas en el cronograma de ese mes (todas las fichas);
+   * si el mes no tiene sesiones, días hábiles × horas por día.
+   */
+  function monthContract(cfg, year, month, sessions) {
+    const c = normalizeConfig(cfg);
+    const start = toISO(year, month, 1);
+    const end = addDays(month === 12 ? toISO(year + 1, 1, 1) : toISO(year, month + 1, 1), -1);
+    const holidays = c.holidays.slice();
+    colombianHolidays(year).forEach(h => { if (holidays.indexOf(h.date) === -1) holidays.push(h.date); });
+    holidays.sort();
+    const out = Object.assign({}, c, { startDate: start, endDate: end, holidays });
+    const delMes = (sessions || []).filter(x => x && x.date >= start && x.date <= end);
+    out.totalHours = delMes.length ? sumHours(delMes) : round1(countBusinessDays(start, end, out) * c.hoursPerDay);
+    return out;
+  }
+
   /** Días hábiles del contrato ya transcurridos, incluyendo hoy. */
   function businessDaysElapsed(cfg, today) {
     if (today < cfg.startDate) return [];
@@ -212,6 +230,30 @@
   }
 
   function sumHours(items) { return round1(items.reduce((s, it) => s + hoursOf(it), 0)); }
+
+  /**
+   * Horario de un mes: las sesiones del mes ordenadas, uniendo franjas seguidas del mismo día, ficha,
+   * competencia y RAP (p. ej. 16–17, 17–18 … 23–24 → 16:00–24:00).
+   * Devuelve [{date, start, end, hours, ficha, programa, competencia, rap, sessions:[...]}].
+   */
+  function monthSchedule(sessions, year, month) {
+    const ym = toISO(year, month, 1).slice(0, 7);
+    const list = (sessions || []).filter(x => x && typeof x.date === 'string' && x.date.slice(0, 7) === ym)
+      .slice().sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
+    const out = [];
+    list.forEach(x => {
+      const key = [x.date, x.ficha || '', x.competencia || '', x.rap || ''].join('|');
+      const last = out[out.length - 1];
+      if (last && last.key === key && last.end === x.start) {
+        last.end = x.end; last.hours = round1(last.hours + hoursOf(x)); last.sessions.push(x);
+      } else {
+        out.push({ key, date: x.date, start: x.start, end: x.end, hours: hoursOf(x), ficha: x.ficha || '', programa: x.programa || '',
+          competencia: x.competencia || '', rap: x.rap || '', sessions: [x] });
+      }
+    });
+    out.forEach(b => { delete b.key; });
+    return out;
+  }
 
   function inContract(iso, cfg) { return iso >= cfg.startDate && iso <= cfg.endDate; }
 
@@ -649,6 +691,33 @@
     return { sessions: actuales.concat(importadas), importadas };
   }
 
+  /**
+   * Cronogramas (archivos) que originaron la programación cargada, agrupados por ficha y archivo.
+   * opts: {ficha (principal por defecto), ym: 'YYYY-MM' del mes a revisar}.
+   * Devuelve [{ficha, programa, archivo, importado, sesiones, horas, desde, hasta, meses:['YYYY-MM'], horasMes}],
+   * ordenado por ficha y fecha de inicio.
+   */
+  function scheduleSources(sessions, opts) {
+    opts = opts || {};
+    const grupos = {};
+    (sessions || []).forEach(x => {
+      if (!x || !isValidISO(x.date)) return;
+      const ficha = String(x.ficha || opts.ficha || ''), archivo = x.archivo || '';
+      const k = ficha + '|' + archivo;
+      const g = grupos[k] || (grupos[k] = { ficha, programa: '', archivo, importado: '', sesiones: 0, horas: 0, desde: x.date, hasta: x.date, meses: [], horasMes: 0 });
+      g.sesiones++; g.horas = round1(g.horas + hoursOf(x));
+      if (!g.programa && x.programa) g.programa = x.programa;
+      if (x.importado && x.importado > g.importado) g.importado = x.importado;
+      if (x.date < g.desde) g.desde = x.date;
+      if (x.date > g.hasta) g.hasta = x.date;
+      const ym = x.date.slice(0, 7);
+      if (g.meses.indexOf(ym) === -1) g.meses.push(ym);
+      if (opts.ym && ym === opts.ym) g.horasMes = round1(g.horasMes + hoursOf(x));
+    });
+    return Object.keys(grupos).map(k => grupos[k]).map(g => Object.assign(g, { meses: g.meses.sort() }))
+      .sort((a, b) => a.ficha.localeCompare(b.ficha) || a.desde.localeCompare(b.desde));
+  }
+
   // ---------------------------------------------------------------------------
   // Utilidades
   // ---------------------------------------------------------------------------
@@ -683,10 +752,10 @@
     isValidISO, isValidTime, dayOfWeek, addDays, diffDays, todayISO, formatDateES, weekStart,
     timeToMinutes, hoursBetween, hoursOf, sumHours, round1, SEMAFORO, semaforo,
     easterSunday, nextMonday, colombianHolidays,
-    normalizeConfig, isHoliday, isBusinessDay, businessDays, countBusinessDays,
+    normalizeConfig, isHoliday, isBusinessDay, businessDays, countBusinessDays, monthContract, monthSchedule,
     businessDaysElapsed, businessDaysRemaining, expectedHoursToDate,
     inContract, overlaps, groupByDate, summarize, buildAlerts, calendarMonth,
-    cellToISO, normalizeTime, parseCSV, parseCronogramaGrid, nameMatches, cronogramaMeta, parseCellText, fillMerges, makeSession, mergeSessions,
+    cellToISO, normalizeTime, parseCSV, parseCronogramaGrid, nameMatches, cronogramaMeta, parseCellText, fillMerges, makeSession, mergeSessions, scheduleSources,
     uid, entryFromSession, fullDayEntry, validateEntry,
   };
 });

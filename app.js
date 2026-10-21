@@ -4,6 +4,7 @@
   const C = window.Calc;
   const STORAGE_KEY = 'control-horas-sena-v1';
   const $ = id => document.getElementById(id);
+  const ARCHIVO_INCLUIDO = 'Programación incluida en la app';
 
   // ---------------------------------------------------------------------------
   // Estado
@@ -11,7 +12,7 @@
   let state = load();
   // Primera vez (sin datos guardados): cargar la programación del cronograma para que el calendario ya la muestre.
   if (!localStorage.getItem(STORAGE_KEY) && !state.sessions.length) {
-    state.sessions = precargada().map(x => C.makeSession(Object.assign({}, x)));
+    state.sessions = precargada().map(x => C.makeSession(Object.assign({ archivo: ARCHIVO_INCLUIDO }, x)));
   }
 
   /** Programación incluida en la app: solo aplica si el instructor configurado es el del cronograma incluido. */
@@ -117,16 +118,30 @@
   const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   let calYM = null; // {y, m} del mes mostrado
 
+  /** Mes inicial del calendario: el de hoy si hoy está dentro del contrato; si no, el mes de inicio del contrato. */
+  function mesInicial() {
+    const t = today(), d = C.inContract(t, cfg()) ? t : cfg().startDate;
+    return { y: +d.slice(0, 4), m: +d.slice(5, 7) };
+  }
+
+  /** Cambiar de mes en el panel también cambia el contrato a ese mes (1 → último día) y recalcula las horas. */
+  function irAMes(y, m) {
+    calYM = { y, m };
+    state.config = C.monthContract(cfg(), y, m, state.sessions);
+    save(); renderConfig();
+  }
+
   function calShift(n) {
-    calYM.m += n;
-    if (calYM.m < 1) { calYM.m = 12; calYM.y--; }
-    if (calYM.m > 12) { calYM.m = 1; calYM.y++; }
-    renderCalendario();
+    let { y, m } = calYM || mesInicial();
+    m += n;
+    if (m < 1) { m = 12; y--; }
+    if (m > 12) { m = 1; y++; }
+    irAMes(y, m);
   }
 
   function renderCalendario() {
     const t = today();
-    if (!calYM) calYM = { y: +t.slice(0, 4), m: +t.slice(5, 7) };
+    if (!calYM) calYM = mesInicial();
     const cal = C.calendarMonth(calYM.y, calYM.m, { config: cfg(), entries: state.entries, sessions: state.sessions, today: t });
     const sesPorDia = C.groupByDate(state.sessions);
     const corto = comp => { const w = String(comp || '').trim().split(/\s+/)[0] || 'Sesión'; return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(); };
@@ -151,6 +166,67 @@
       : '') + avisoComplementarias('cal-comp');
     const b = $('cal-cargar'); if (b) b.addEventListener('click', cargarPrecargada);
     const bc = $('cal-comp'); if (bc) bc.addEventListener('click', cargarComplementarias);
+    renderHorario(cal.year, cal.month);
+    renderArchivos(cal.year, cal.month);
+  }
+
+  /** Cronogramas (Excel) cargados: de qué archivo viene cada ficha, qué meses cubre y si falta el del mes mostrado. */
+  function renderArchivos(y, m) {
+    const ym = `${y}-${String(m).padStart(2, '0')}`, mes = `${MESES[m - 1]} ${y}`;
+    $('archivos-title').textContent = 'Cronogramas (Excel) cargados';
+    const src = C.scheduleSources(state.sessions, { ficha: cfg().ficha, ym });
+    if (!src.length) { $('archivos').innerHTML = '<p class="muted">Todavía no hay cronogramas cargados. Súbelos en la pestaña Programación.</p>'; return; }
+    const MES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    const mesCorto = k => `${MES_C[+k.slice(5) - 1]} ${k.slice(0, 4)}`;
+    const fechaImp = iso => iso ? fmt(iso.slice(0, 10)) : '—';
+    // Fichas que tienen programación en otros meses pero ninguna en el mes mostrado.
+    const porFicha = {};
+    src.forEach(g => { porFicha[g.ficha] = (porFicha[g.ficha] || 0) + g.horasMes; });
+    const faltan = Object.keys(porFicha).filter(f => !porFicha[f]);
+    const aviso = faltan.length
+      ? `<div class="msg err">Sin programación en ${esc(mes)} para: ${esc(faltan.map(f => f + (f === String(cfg().ficha) ? ' (principal)' : '')).join(', '))}. Si esa ficha tiene clases este mes, sube su Excel en <b>Programación</b>.</div>`
+      : `<div class="msg ok">Todas las fichas cargadas tienen programación en ${esc(mes)}.</div>`;
+    const rows = src.map(g => {
+      const comp = g.ficha !== String(cfg().ficha);
+      return `<tr>
+        <td style="white-space:nowrap"><span class="badge ${comp ? 'comp' : 'gris'}">${comp ? '◆ ' : ''}${esc(g.ficha || '—')}</span>${g.programa ? `<br><span class="muted">${esc(g.programa)}</span>` : ''}</td>
+        <td>${g.archivo ? esc(g.archivo) : '<span class="muted">Sin nombre (cargado antes de esta versión)</span>'}</td>
+        <td>${g.meses.map(k => `<span class="badge ${k === ym ? 'verde' : 'gris'}">${esc(mesCorto(k))}</span>`).join(' ')}<br><span class="muted">${esc(fmt(g.desde))} → ${esc(fmt(g.hasta))}</span></td>
+        <td>${g.sesiones}</td>
+        <td><strong>${g.horas}</strong></td>
+        <td>${g.horasMes ? `<strong>${g.horasMes}</strong>` : '<span class="badge rojo">0</span>'}</td>
+        <td style="white-space:nowrap">${esc(fechaImp(g.importado))}</td>
+      </tr>`;
+    }).join('');
+    $('archivos').innerHTML = aviso + `<div class="table-wrap"><table><thead><tr><th>Ficha</th><th>Archivo</th><th>Meses con programación</th><th>Sesiones</th><th>Horas</th><th>Horas en ${esc(MES_C[m - 1])}</th><th>Importado</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  /** Tabla con el horario del mes mostrado en el calendario (franjas seguidas unidas). */
+  function renderHorario(y, m) {
+    const t = today();
+    $('horario-title').textContent = `Horario de ${MESES[m - 1]} ${y}`;
+    const bloques = C.monthSchedule(state.sessions, y, m);
+    if (!bloques.length) { $('horario').innerHTML = '<p class="muted">Este mes no tiene sesiones programadas.</p>'; return; }
+    const estados = { pendiente: ['Pendiente', 'gris'], cumplida: ['Cumplida', 'verde'], parcial: ['Parcial', 'amarillo'], no_cumplida: ['No cumplida', 'rojo'] };
+    const porFicha = {};
+    bloques.forEach(b => { const f = fichaDe(b.sessions[0]); porFicha[f] = C.round1((porFicha[f] || 0) + b.hours); });
+    const total = C.round1(bloques.reduce((a, b) => a + b.hours, 0));
+    const rows = bloques.map(b => {
+      const s0 = b.sessions[0], comp = esComplementaria(s0);
+      const st = b.sessions.every(x => x.status === s0.status) ? s0.status : 'parcial';
+      const fin = b.end === '23:59' ? '24:00' : b.end;
+      return `<tr class="${b.date === t ? 'hoy' : ''}">
+        <td style="white-space:nowrap">${esc(fmt(b.date))}</td>
+        <td style="white-space:nowrap">${esc(b.start)}–${esc(fin)}</td>
+        <td><strong>${b.hours}</strong></td>
+        <td style="white-space:nowrap"><span class="badge ${comp ? 'comp' : 'gris'}" title="${esc(b.programa)}">${comp ? '◆ ' : ''}${esc(fichaDe(s0))}</span></td>
+        <td>${esc(b.competencia)}${b.rap ? `<br><span class="muted">${esc(b.rap)}</span>` : ''}</td>
+        <td><span class="badge ${estados[st][1]}">${estados[st][0]}</span></td>
+      </tr>`;
+    }).join('');
+    const resumen = Object.keys(porFicha).sort().map(f => `<span class="badge ${f === String(cfg().ficha) ? 'gris' : 'comp'}">${esc(f)}: ${porFicha[f]} h</span>`).join(' ');
+    $('horario').innerHTML = `<p class="muted">${bloques.length} franjas · <strong>${total} h programadas</strong> ${resumen}</p>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Horario</th><th>Horas</th><th>Ficha</th><th>Competencia / RAP</th><th>Estado</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
   function avisoComplementarias(btnId) {
@@ -160,7 +236,7 @@
   }
   $('cal-prev').addEventListener('click', () => calShift(-1));
   $('cal-next').addEventListener('click', () => calShift(1));
-  $('cal-hoy').addEventListener('click', () => { calYM = null; renderCalendario(); });
+  $('cal-hoy').addEventListener('click', () => { const t = today(); irAMes(+t.slice(0, 4), +t.slice(5, 7)); });
   $('calendario').addEventListener('click', ev => {
     const d = ev.target.closest('.day'); if (!d || !d.dataset.date) return;
     resetForm(); $('e-date').value = d.dataset.date; $('q-date').value = d.dataset.date;
@@ -279,6 +355,8 @@
     const c = cfg();
     const soloContrato = $('imp-solo-contrato').checked && !opts.todo;
     if (soloContrato) nuevas = nuevas.filter(s => C.inContract(s.date, c));
+    const ahora = new Date().toISOString();
+    nuevas = nuevas.map(s => Object.assign(s, { archivo: s.archivo || opts.archivo || '', importado: ahora }));
     if (!nuevas.length) { msg('imp-msg', `No hay sesiones para importar desde ${origen} (revisa el filtro "solo contrato" y el nombre configurado).`, false); return; }
     // Al reemplazar solo se sustituye el rango importado (el contrato si está filtrado) y se conservan
     // los estados ya marcados en sesiones que coinciden en fecha y horario.
@@ -325,6 +403,7 @@
     Promise.all(files.map(leerCronograma)).then(res => {
       const conSesiones = res.filter(r => r.sessions.length);
       const sin = res.filter(r => !r.sessions.length);
+      conSesiones.forEach(r => r.sessions.forEach(x => { x.archivo = r.archivo; }));
       if (conSesiones.length) importSessions([].concat(...conSesiones.map(r => r.sessions)), conSesiones.map(r => `${r.archivo} (ficha ${r.ficha}: ${r.sessions.length} sesiones)`).join(', '));
       else msg('imp-msg', '', true);
       if (sin.length) $('imp-msg').innerHTML += `<div class="msg err">${esc(sin.map(r => `${r.archivo}: no aparece "${cfg().instructorName}"`).join('; '))}</div>`;
@@ -338,7 +417,7 @@
     reader.onload = e => {
       const { sessions, errors } = C.parseCSV(e.target.result, { ficha: cfg().ficha });
       if (!sessions.length) { msg('imp-msg', errors.join('. ') || 'Sin sesiones', false); return; }
-      importSessions(sessions, f.name);
+      importSessions(sessions, f.name, { archivo: f.name });
       if (errors.length) $('imp-msg').innerHTML += `<div class="msg err">${esc(errors.length + ' líneas omitidas: ' + errors.slice(0, 5).join('; '))}</div>`;
       ev.target.value = '';
     };
@@ -349,7 +428,7 @@
     const pre = precargada().map(s => C.makeSession(Object.assign({}, s)));
     // Se carga completa (todos los meses) sin aplicar el filtro "solo contrato", para que el calendario muestre todo el cronograma.
     $('imp-reemplazar').checked = true;
-    importSessions(pre, 'la programación incluida (cronograma completo, todos los meses)', { todo: true });
+    importSessions(pre, 'la programación incluida (cronograma completo, todos los meses)', { todo: true, archivo: ARCHIVO_INCLUIDO });
   }
   $('btn-precargada').addEventListener('click', cargarPrecargada);
 
@@ -357,7 +436,7 @@
   function cargarComplementarias() {
     const faltan = fichasFaltantes();
     const pre = precargada().filter(s => faltan.indexOf(fichaDe(s)) !== -1).map(s => C.makeSession(Object.assign({}, s)));
-    importSessions(pre, 'la programación incluida (formaciones complementarias)', { todo: true });
+    importSessions(pre, 'la programación incluida (formaciones complementarias)', { todo: true, archivo: ARCHIVO_INCLUIDO });
   }
 
   $('form-sesion').addEventListener('submit', ev => {
@@ -464,6 +543,7 @@
       defaultStart: $('c-defstart').value || '12:00', instructorName: $('c-name').value.trim(), ficha: $('c-ficha').value.trim(),
       simulatedToday: $('c-today').value || '', workDays, holidays, timeZone: 'America/Bogota',
     });
+    calYM = null; // el calendario vuelve al mes del contrato guardado
     save();
     $('imp-instructor').value = cfg().instructorName || '';
     $('c-msg').innerHTML = '<span class="badge verde">Configuración guardada</span>';
@@ -486,7 +566,7 @@
       try {
         const data = JSON.parse(e.target.result);
         if (!data || typeof data !== 'object' || (!data.config && !data.entries && !data.sessions)) throw new Error('El archivo no parece un respaldo de esta app');
-        state = sanitize(data); save(); renderConfig();
+        state = sanitize(data); calYM = null; save(); renderConfig();
         msg('backup-msg', `Respaldo restaurado: ${state.entries.length} registros, ${state.sessions.length} sesiones.`, true);
       } catch (err) { msg('backup-msg', 'No se pudo importar: ' + err.message, false); }
       ev.target.value = '';

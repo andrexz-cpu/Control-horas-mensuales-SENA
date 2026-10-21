@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html lang="es" data-v="20261005104526">
+<html lang="es" data-v="20261021130617">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Control de horas — Contrato SENA</title>
+  <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
@@ -21,7 +23,7 @@
       }).catch(function () {});
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=20261005104526">
+  <link rel="stylesheet" href="styles.css?v=20261021130617">
 </head>
 <body>
 <header>
@@ -66,8 +68,14 @@
         <span><i class="no_habil"></i> No hábil / festivo</span>
         <span><i class="comp"></i> ◆ Formación complementaria</span>
       </div>
-      <p class="muted">Cada día muestra tus sesiones programadas (horario y competencia; el color de la franja es su estado: azul pendiente, verde cumplida, amarillo parcial, rojo no cumplida) y <b>✓</b> las horas ya registradas. Toca un día para registrar horas en esa fecha.</p>
+      <p class="muted">Cada día muestra tus sesiones programadas (horario y competencia; el color de la franja es su estado: azul pendiente, verde cumplida, amarillo parcial, rojo no cumplida) y <b>✓</b> las horas ya registradas. Toca un día para registrar horas en esa fecha. Al cambiar de mes con <b>‹ ›</b> u <b>Hoy</b>, el contrato pasa a ese mes (del 1 al último día) y la meta de horas pasa a ser lo programado en el cronograma de ese mes (si el mes no tiene programación: días hábiles × horas por día, con festivos de Colombia).</p>
     </div>
+
+    <h2 id="horario-title">Horario del mes</h2>
+    <div class="card" id="horario"></div>
+
+    <h2 id="archivos-title">Cronogramas (Excel) cargados</h2>
+    <div class="card" id="archivos"></div>
 
     <h2>Alertas</h2>
     <div id="alertas"></div>
@@ -218,9 +226,9 @@
 <footer>Control de horas · SENA · zona horaria America/Bogota</footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="calc.js?v=20261005104526"></script>
-<script src="programacion_3536507.js?v=20261005104526"></script>
-<script src="programacion_complementarias.js?v=20261005104526"></script>
-<script src="app.js?v=20261005104526"></script>
+<script src="calc.js?v=20261021130617"></script>
+<script src="programacion_3536507.js?v=20261021130617"></script>
+<script src="programacion_complementarias.js?v=20261021130617"></script>
+<script src="app.js?v=20261021130617"></script>
 </body>
 </html>

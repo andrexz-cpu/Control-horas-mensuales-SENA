@@ -409,3 +409,46 @@ test('programación incluida: las complementarias no se cruzan con la ficha prin
   comp.forEach(s => assert.ok(!todas.some(p => p !== s && C.overlaps(p, s)), 'cruce el ' + s.date));
   assert.equal(new Set(todas.map(s => s.id)).size, todas.length, 'ids únicos');
 });
+
+// ---------------------------------------------------------------------------
+test('monthContract: el contrato pasa al mes completo y recalcula horas con festivos', () => {
+  const nov = C.monthContract(CFG_LS, 2026, 11);
+  assert.equal(nov.startDate, '2026-11-01');
+  assert.equal(nov.endDate, '2026-11-30');
+  assert.ok(nov.holidays.includes('2026-11-02') && nov.holidays.includes('2026-11-16'));
+  // nov 2026 lunes a sábado: 25 días − 2 festivos = 23 × 8 h
+  assert.equal(nov.totalHours, 184);
+  assert.equal(C.monthContract(CFG_LV, 2026, 11).totalHours, 19 * 8);
+  // con cronograma cargado, la meta del mes = horas programadas de ese mes (todas las fichas)
+  const ses = [C.makeSession({ date: '2026-11-03', start: '12:00', end: '20:00', ficha: '1' }),
+    C.makeSession({ date: '2026-11-04', start: '14:00', end: '22:00', ficha: '2' }),
+    C.makeSession({ date: '2026-12-01', start: '12:00', end: '20:00', ficha: '1' })];
+  assert.equal(C.monthContract(CFG_LS, 2026, 11, ses).totalHours, 16);
+  const dic = C.monthContract(CFG_LS, 2026, 12);
+  assert.equal(dic.endDate, '2026-12-31');
+  const feb = C.monthContract(CFG_LS, 2028, 2);
+  assert.equal(feb.endDate, '2028-02-29');
+});
+
+test('monthSchedule: une franjas seguidas del mismo día y competencia', () => {
+  const mk = (date, start, end, competencia) => C.makeSession({ date, start, end, ficha: '1', competencia });
+  const ses = [mk('2026-10-13', '17:00', '18:00', 'Registrar'), mk('2026-10-13', '16:00', '17:00', 'Registrar'),
+    mk('2026-10-13', '18:00', '19:00', 'Otra'), mk('2026-10-14', '16:00', '17:00', 'Registrar'), mk('2026-11-02', '16:00', '17:00', 'Registrar')];
+  const b = C.monthSchedule(ses, 2026, 10);
+  assert.equal(b.length, 3);
+  assert.deepEqual([b[0].start, b[0].end, b[0].hours], ['16:00', '18:00', 2]);
+  assert.equal(b[1].competencia, 'Otra');
+  assert.equal(b[2].date, '2026-10-14');
+});
+
+test('scheduleSources: archivos cargados por ficha, meses cubiertos y horas del mes', () => {
+  const mk = (date, ficha, archivo) => C.makeSession({ date, start: '12:00', end: '20:00', ficha, archivo, importado: '2026-10-0' + date.slice(-1) });
+  const src = C.scheduleSources([mk('2026-10-02', '1', 'a.xlsx'), mk('2026-11-03', '1', 'a.xlsx'), mk('2026-10-05', '2', 'b.xlsx'), mk('2026-09-07', '', '')],
+    { ficha: '1', ym: '2026-11' });
+  assert.equal(src.length, 3);
+  const a = src.find(g => g.archivo === 'a.xlsx');
+  assert.deepEqual([a.sesiones, a.horas, a.desde, a.hasta, a.horasMes, a.importado], [2, 16, '2026-10-02', '2026-11-03', 8, '2026-10-03']);
+  assert.deepEqual(a.meses, ['2026-10', '2026-11']);
+  assert.equal(src.find(g => g.archivo === 'b.xlsx').horasMes, 0);
+  assert.equal(src.filter(g => g.ficha === '1').length, 2); // la sesión sin ficha toma la principal
+});
